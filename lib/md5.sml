@@ -40,8 +40,8 @@ struct
         fun f i' = word8To32 (Word8Vector.sub (xs, i'))
         val w = Word32.<< (f (i + 3), 0wx18)
         val x = Word32.<< (f (i + 2), 0wx10)
-        val y = Word32.<< (f (i + 1), 0wx8)
-        val z = f i
+        val y = Word32.<< (f (i + 1), 0wx08)
+        val z = Word32.<< (f i      , 0wx00)
       in
         Word32.orb (w, Word32.orb (x, Word32.orb (y, z)))
       end
@@ -82,7 +82,7 @@ struct
     fun andOrAndNot (b, c, d) =
         Word32.orb (Word32.andb (b, d), Word32.andb (c, Word32.notb d))
 
-    fun xorXor (b, c, d) = Word32.xorb (b, Word32.xorb (c, d))
+    fun xorXor (b, c, d) = Word32.xorb (Word32.xorb (b, c), d)
 
     fun xorOrNot (b, c, d) = Word32.xorb (c, Word32.orb (b, Word32.notb d))
 
@@ -137,8 +137,6 @@ struct
     fun finalize blockLen (block, (totalLen, vars)) = let
       val totalLen' = Word64.+ (totalLen, blockLen)
       val blockLen' = Word64.+ (blockLen, 0w1)
-      val _ = print ("Finalize with block length" ^ Int.toString (Word64.toInt totalLen')
-                    ^ "\n")
     in
       if blockLen < 0wx38 then
         ( totalLen'
