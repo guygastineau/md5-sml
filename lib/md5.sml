@@ -2,15 +2,21 @@ structure MD5 =
 struct
   type vars = { a : Word32.word, b : Word32.word, c : Word32.word, d : Word32.word }
 
+  val initialVars : vars
+      = { a = 0wx67452301
+        , b = 0wxefcdab89
+        , c = 0wx98badcfe
+        , d = 0wx10325476
+        }
+
   fun perRoundShift n =
-      Word.fromInt
-        (if n < 16
-         then List.nth ([7, 12, 17, 22], n mod 4)
-         else if n < 32
-         then List.nth ([5, 9, 14, 20], n mod 4)
-         else if n < 48
-         then List.nth ([4, 11, 16, 23], n mod 4)
-         else List.nth ([6, 10, 15, 21], n mod 4))
+      if n < 0x10
+      then List.nth ([0w7, 0w12, 0w17, 0w22], n mod 4)
+      else if n < 0x20
+      then List.nth ([0w5, 0w9, 0w14, 0w20], n mod 4)
+      else if n < 0x30
+      then List.nth ([0w4, 0w11, 0w16, 0w23], n mod 4)
+      else List.nth ([0w6, 0w10, 0w15, 0w21], n mod 4)
 
   val constants : Word32.word vector =
       Vector.fromList
@@ -41,7 +47,7 @@ struct
         val w = Word32.<< (f (i + 3), 0wx18)
         val x = Word32.<< (f (i + 2), 0wx10)
         val y = Word32.<< (f (i + 1), 0wx08)
-        val z = Word32.<< (f i      , 0wx00)
+        val z = f i
       in
         w + x + y + z
       end
@@ -129,20 +135,16 @@ struct
         let
           fun rounds (i, { a = a, b = b, c = c, d = d }) : vars =
               let
-                val (f', g) =
-                    if i < 0x10      then (fF, idxF i)
+                val (f', k) =
+                    if      i < 0x10 then (fF, idxF i)
                     else if i < 0x20 then (fG, idxG i)
                     else if i < 0x30 then (fH, idxH i)
                     else                  (fI, idxI i)
-                val mg = indexedWord32LE (block, g * 4)
-                val ki = Vector.sub (constants, i)
-                val f = foldl Word32.+ 0wx0 [f' (b, c, d), a, ki, mg]
+                val xk = indexedWord32LE (block, k * 4)
+                val ti = Vector.sub (constants, i)
+                val a' =  b + Word32.<< (a + f' (b, c, d) + xk + ti, perRoundShift i)
               in
-                { a = d
-                , b = b + Word32.<< (f, perRoundShift i)
-                , c = b
-                , d = c
-                }
+                { a = d, b = a', c = b, d = c }
               end
         in
           combineVars vars (foldl rounds vars (List.tabulate (0x40, (fn x => x))))
@@ -163,7 +165,7 @@ struct
       val blockLen' = blockLen + 0w1
       val block = Word8Vector.concat [ block, Word8Vector.fromList [0wx80] ]
     in
-      if blockLen' < 0wx38 then
+      if blockLen' <= 0wx38 then
         let
           val last = padWithLength (totalLen, blockLen', block)
         in
@@ -174,12 +176,11 @@ struct
         let
           val padN = 0x40 - Word64.toInt blockLen'
           val secondToLast = pad (padN, block)
-          val vars' = process (secondToLast, vars)
           val last = padWithLength (totalLen, 0w0, Word8Vector.fromList [])
         in
           (print "secondToLast: "; printW8Vec secondToLast; print "\n";
            print "last: "; printW8Vec last;
-           (totalLen, process (last, vars')))
+           (totalLen,  process (last, process (secondToLast, vars))))
         end
     end
 
@@ -196,13 +197,6 @@ struct
                 print ("and total length " ^ Word64.toString totalLen' ^ "\n");
                 (totalLen', process (block, vars)))
         end
-
-    val initialVars : vars
-        = { a = 0wx67452301
-          , b = 0wxefcdab89
-          , c = 0wx98badcfe
-          , d = 0wx10325476
-          }
 
     fun streamFoldBlocks blockSize f acc (strm : BinIO.instream) = let
       val block = BinIO.inputN (strm, blockSize)
