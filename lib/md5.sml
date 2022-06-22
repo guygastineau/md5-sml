@@ -76,8 +76,11 @@ struct
 
   (* block must be >= 512 bits! *)
   local
-    fun andOrNotAnd (b, c, d)
-        = Word32.orb (Word32.andb (b, c), Word32.andb (Word32.notb b, d))
+    fun andOrNotAnd (b, c, d) =
+        Word32.orb (Word32.andb (b, c), Word32.andb (Word32.notb b, d))
+
+    fun andOrAndNot (b, c, d) =
+        Word32.orb (Word32.andb (b, d), Word32.andb (c, Word32.notb d))
 
     fun xorXor (b, c, d) = Word32.xorb (b, Word32.xorb (c, d))
 
@@ -92,7 +95,7 @@ struct
                     if i < 0x10
                     then (andOrNotAnd (b, c, d), i)
                     else if i < 0x20
-                    then (andOrNotAnd (d, b, c), (5 * i + 1) mod 16)
+                    then (andOrAndNot (b, c, d), (5 * i + 1) mod 16)
                     else if i < 0x30
                     then (xorXor (b, c, d), (3 * i + 5) mod 16)
                     else (xorOrNot (b, c, d), (7 * i) mod 16)
