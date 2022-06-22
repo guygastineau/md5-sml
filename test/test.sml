@@ -15,6 +15,9 @@ open Expect
 open TestUtil
 open MD5
 
+fun equalToString expected actual
+    = mkEqualTo { eq = op =, show = identity } expected actual
+
 fun equalToWord32 expected actual
     = mkEqualTo { eq = op =, show = Word32.toString }
                 (Word32.fromLargeInt expected) actual
@@ -58,6 +61,11 @@ val testsuite =
               @@ (fn _ => equalToWord 15 (perRoundShift 58))
           , test "3 3 with mod"
               @@ (fn _ => equalToWord 21 (perRoundShift 55))
+          ]
+      , describe "digest message tests"
+          [ test "pangram digest"
+              @@ (fn _ => equalToString "9e107d9d372bb6826bd81d3542a419d6"
+                            @@ MD5.fileDigestMessage "test/data/pangram.txt")
           ]
       ]
 
