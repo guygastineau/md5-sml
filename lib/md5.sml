@@ -76,41 +76,47 @@ struct
 
   (* block must be >= 512 bits! *)
   local
-    fun andOrNotAnd (b, c, d) =
+    fun combineVars ({ a = a , b = b , c = c , d = d  } : vars)
+                    ({ a = a', b = b', c = c', d = d' } : vars) : vars =
+        { a = a + a', b = b + b', c = c + c', d = d' }
+
+    fun fF (b, c, d) =
         Word32.orb (Word32.andb (b, c), Word32.andb (Word32.notb b, d))
 
-    fun andOrAndNot (b, c, d) =
+    fun fG (b, c, d) =
         Word32.orb (Word32.andb (b, d), Word32.andb (c, Word32.notb d))
 
-    fun xorXor (b, c, d) = Word32.xorb (Word32.xorb (b, c), d)
+    fun fH (b, c, d) = Word32.xorb (Word32.xorb (b, c), d)
 
-    fun xorOrNot (b, c, d) = Word32.xorb (c, Word32.orb (b, Word32.notb d))
+    fun fI (b, c, d) = Word32.xorb (c, Word32.orb (b, Word32.notb d))
+
+    fun idxF i = i
+    fun idxG i = (5 * i + 1) mod 16
+    fun idxH i = (3 * i + 5) mod 16
+    fun idxI i = (7 * i) mod 16
 
     (* block must be 64 bytes *)
     fun process (block, vars) =
         let
-          fun round (i, { a = a, b = b, c = c, d = d }) =
+          fun round (i, { a = a, b = b, c = c, d = d }) : vars =
               let
                 val (f', g) =
-                    if i < 0x10
-                    then (andOrNotAnd (b, c, d), i)
-                    else if i < 0x20
-                    then (andOrAndNot (b, c, d), (5 * i + 1) mod 16)
-                    else if i < 0x30
-                    then (xorXor (b, c, d), (3 * i + 5) mod 16)
-                    else (xorOrNot (b, c, d), (7 * i) mod 16)
+                    if i < 0x10      then (fF, idxF i)
+                    else if i < 0x20 then (fG, idxG i)
+                    else if i < 0x30 then (fH, idxH i)
+                    else                  (fI, idxI i)
                 val mg = indexedWord32LE (block, g * 4)
                 val ki = Vector.sub (constants, i)
-                val f = foldl Word32.+ 0wx0 [f', a, ki, mg]
+                val f = foldl Word32.+ 0wx0 [f' (b, c, d), a, ki, mg]
               in
-                { a = a + d
+                { a = d
                 , b = b + Word32.<< (f, perRoundShift i)
-                , c = c + b
-                , d = d + c
+                , c = b
+                , d = c
                 }
               end
         in
-          foldl round vars (List.tabulate (0x40, (fn x => x)))
+          combineVars vars (foldl round vars (List.tabulate (0x40, (fn x => x))))
         end
 
     fun trailingBit block =
