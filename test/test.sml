@@ -63,4 +63,5 @@ val testsuite =
 
 (* RUN *)
 
-val _ = Test.run testsuite
+val _ =
+    Test.run testsuite;

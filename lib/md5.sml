@@ -90,13 +90,13 @@ struct
               let
                 val (f', g) =
                     if i < 0x10
-                    then (andOrNotAnd (b, c, d), Word32.fromInt i)
+                    then (andOrNotAnd (b, c, d), i)
                     else if i < 0x20
-                    then (andOrNotAnd (d, b, c), Word32.fromInt (5 * i + 1 mod 16))
+                    then (andOrNotAnd (d, b, c), (5 * i + 1) mod 16)
                     else if i < 0x30
-                    then (xorXor (b, c, d), Word32.fromInt (3 * i + 5 mod 16))
-                    else (xorOrNot (b, c, d), Word32.fromInt (7 * i mod 16))
-                val mg = indexedWord32LE (block, i * 4)
+                    then (xorXor (b, c, d), (3 * i + 5) mod 16)
+                    else (xorOrNot (b, c, d), (7 * i) mod 16)
+                val mg = indexedWord32LE (block, g * 4)
                 val ki = Vector.sub (constants, i)
                 val f = foldl Word32.+ 0wx0 [f', a, ki, mg]
               in
@@ -133,7 +133,9 @@ struct
 
     fun finalize blockLen (block, (totalLen, vars)) = let
       val totalLen' = Word64.+ (totalLen, blockLen)
-      val blockLen' = Word64.+ (blockLen, 0wx1)
+      val blockLen' = Word64.+ (blockLen, 0w1)
+      val _ = print ("Finalize with block length" ^ Int.toString (Word64.toInt totalLen')
+                    ^ "\n")
     in
       if blockLen < 0wx38 then
         ( totalLen'
@@ -173,7 +175,7 @@ struct
       val blockLen = Word8Vector.length block
       val isEnd' = blockLen < blockSize
     in
-      if blockLen < 0 then
+      if blockLen = 0 then
         if isEnd then acc (* End was already encountered *)
         else f (block, acc) (* Last block was a "perfect" end *)
       else streamFoldBlocks (f, blockSize) isEnd' (f (block, acc)) strm
