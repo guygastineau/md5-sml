@@ -74,6 +74,35 @@ struct
     Word8Vector.tabulate (4, f)
   end
 
+  fun hexDigit (0w0 : Word8.word) = #"0"
+    | hexDigit 0w1 = #"1"
+    | hexDigit 0w2 = #"2"
+    | hexDigit 0w3 = #"3"
+    | hexDigit 0w4 = #"4"
+    | hexDigit 0w5 = #"5"
+    | hexDigit 0w6 = #"6"
+    | hexDigit 0w7 = #"7"
+    | hexDigit 0w8 = #"8"
+    | hexDigit 0w9 = #"9"
+    | hexDigit 0wxa = #"a"
+    | hexDigit 0wxb = #"b"
+    | hexDigit 0wxc = #"c"
+    | hexDigit 0wxd = #"d"
+    | hexDigit 0wxe = #"e"
+    | hexDigit 0wxf = #"f"
+
+  fun word8ToHex w =
+      String.implode
+        [ hexDigit (Word8.div (w, 0wx10))
+        , hexDigit (Word8.mod (w, 0wx10))
+        ]
+
+  fun printW8Vec xs =
+      Word8Vector.appi
+        (fn (i, x) => ((if i mod 16 = 0 then print "\n" else print "");
+                       print (word8ToHex x ^ " ")))
+        xs
+
   (* block must be = 512 bits (0x40 bytes)! *)
   local
     fun combineVars ({ a = a , b = b , c = c , d = d  } : vars)
@@ -119,9 +148,6 @@ struct
           combineVars vars (foldl rounds vars (List.tabulate (0x40, (fn x => x))))
         end
 
-    fun trailingBit block =
-        Word8Vector.concat [ block, Word8Vector.fromList [0wx80] ]
-
     fun pad (n, block) =
         Word8Vector.concat [block, Word8Vector.tabulate (n, (fn _ => 0w0))]
 
@@ -134,20 +160,26 @@ struct
         end
 
     fun finalize blockLen (block, (totalLen, vars)) = let
-      val totalLen' = totalLen + blockLen
       val blockLen' = blockLen + 0w1
-      val block = trailingBit block
+      val block = Word8Vector.concat [ block, Word8Vector.fromList [0wx80] ]
     in
       if blockLen' < 0wx38 then
-        ( totalLen'
-        , process (padWithLength (totalLen', blockLen', block), vars))
+        let
+          val last = padWithLength (totalLen, blockLen', block)
+        in
+          (print "last: "; printW8Vec last; print "\n";
+           (totalLen, process (last, vars)))
+        end
       else
         let
           val padN = 0x40 - Word64.toInt blockLen'
-          val vars' = process (pad (padN, block), vars)
+          val secondToLast = pad (padN, block)
+          val vars' = process (secondToLast, vars)
+          val last = padWithLength (totalLen, 0w0, Word8Vector.fromList [])
         in
-          ( totalLen'
-          , process (padWithLength (totalLen',  0w0, Word8Vector.fromList []), vars'))
+          (print "secondToLast: "; printW8Vec secondToLast; print "\n";
+           print "last: "; printW8Vec last;
+           (totalLen, process (last, vars')))
         end
     end
 
@@ -157,8 +189,12 @@ struct
           val totalLen' = totalLen + blockLen
         in
           if blockLen < 0wx40
-          then finalize blockLen (block, (totalLen, vars))
-          else (totalLen', process (block, vars))
+          then (print ("Finalizing with " ^ Word64.toString blockLen ^ "bytes\n");
+                print ("and total length " ^ Word64.toString totalLen' ^ "\n");
+                finalize blockLen (block, (totalLen', vars)))
+          else (print ("Continuing with " ^ Word64.toString blockLen ^ "bytes\n");
+                print ("and total length " ^ Word64.toString totalLen' ^ "\n");
+                (totalLen', process (block, vars)))
         end
 
     val initialVars : vars
@@ -194,35 +230,7 @@ struct
 
   end
 
-  local
-    fun hexDigit (0w0 : Word8.word) = #"0"
-      | hexDigit 0w1 = #"1"
-      | hexDigit 0w2 = #"2"
-      | hexDigit 0w3 = #"3"
-      | hexDigit 0w4 = #"4"
-      | hexDigit 0w5 = #"5"
-      | hexDigit 0w6 = #"6"
-      | hexDigit 0w7 = #"7"
-      | hexDigit 0w8 = #"8"
-      | hexDigit 0w9 = #"9"
-      | hexDigit 0wxa = #"a"
-      | hexDigit 0wxb = #"b"
-      | hexDigit 0wxc = #"c"
-      | hexDigit 0wxd = #"d"
-      | hexDigit 0wxe = #"e"
-      | hexDigit 0wxf = #"f"
-
-    fun word8ToHex w =
-        String.implode
-          [ hexDigit (Word8.div (w, 0wx10))
-          , hexDigit (Word8.mod (w, 0wx10))
-          ]
-  in
-
   val digestMessage = Word8Vector.foldl (fn (x, msg) => msg ^ word8ToHex x) ""
-
-  end
-
   val streamDigestMessage = digestMessage o streamDigest
   val fileDigestMessage = digestMessage o fileDigest
 
