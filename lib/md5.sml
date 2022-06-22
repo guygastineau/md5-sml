@@ -57,7 +57,21 @@ struct
         (shiftRight (shiftLeft (x, ls), rs))
     end
   in
-    Word8Vector.tabulate (7, f)
+    Word8Vector.tabulate (8, f)
+  end
+
+  fun word32ToWord8VecLE x = let
+    fun shiftLeft (x, n) = Word32.<< (x, Word.fromInt n)
+    fun shiftRight (x, n) = Word32.>> (x, Word.fromInt n)
+    fun f n = let
+      val ls = (3 - n) * 8
+      val rs = ls + n * 8
+    in
+      (Word8.fromLargeWord o Word32.toLargeWord)
+        (shiftRight (shiftLeft (x, ls), rs))
+    end
+  in
+    Word8Vector.tabulate (4, f)
   end
 
   (* block must be >= 512 bits! *)
@@ -70,7 +84,7 @@ struct
     fun xorOrNot (b, c, d) = Word32.xorb (c, Word32.orb (b, Word32.notb d))
 
     (* block must be 64 bytes *)
-    fun process (block, (totalLen, vars)) =
+    fun process (block, vars) =
         let
           fun round (i, { a = a, b = b, c = c, d = d }) =
               let
@@ -93,9 +107,7 @@ struct
                 }
               end
         in
-          (Word64.+ (totalLen, 0wx40)
-          , foldl round vars (List.tabulate (0x3f, (fn x => x)))
-          )
+          foldl round vars (List.tabulate (0x40, (fn x => x)))
         end
 
     fun trailingBit block =
@@ -106,7 +118,7 @@ struct
 
     fun pad (n, block) =
         let
-          val padding = Word8Vector.tabulate (n - 1, (fn _ => 0w0))
+          val padding = Word8Vector.tabulate (n, (fn _ => 0w0))
         in
           Word8Vector.concat [block, padding]
         end
@@ -123,31 +135,31 @@ struct
       val totalLen' = Word64.+ (totalLen, blockLen)
       val blockLen' = Word64.+ (blockLen, 0wx1)
     in
-      if Word64.< (blockLen, 0wx38) then
-              process (padWithLength (totalLen', blockLen', trailingBit block)
-                      , (totalLen', vars))
-          else
-            let
-              val padN = 0x40 - Word64.toInt blockLen'
-              val (_, vars') = process (pad (padN, trailingBit block)
-                                       , (totalLen', vars))
-            in
-              process (padWithLength (totalLen',  0w0, Word8Vector.fromList [])
-                      , (totalLen', vars))
-            end
+      if blockLen < 0wx38 then
+        ( totalLen'
+        , process (padWithLength (totalLen', blockLen', trailingBit block), vars))
+      else
+        let
+          val padN = 0x40 - Word64.toInt blockLen'
+          val vars' = process (pad (padN, trailingBit block), vars)
+        in
+          ( totalLen'
+          , process (padWithLength (totalLen',  0w0, Word8Vector.fromList []), vars))
+        end
     end
   in
     fun runBlock (block, (totalLen, vars)) =
         let
           val blockLen = Word64.fromInt (Word8Vector.length block)
+          val totalLen' = Word64.+ (totalLen, blockLen)
         in
-          if blockLen < Word64.fromInt 64
+          if blockLen < 0wx40
           then finalize blockLen (block, (totalLen, vars))
-          else process (block, (totalLen, vars))
+          else (totalLen', process (block, vars))
         end
   end
 
-  val initialVars
+  val initialVars : vars
       = { a = 0wx67452301
         , b = 0wxefcdab89
         , c = 0wx98badcfe
@@ -155,5 +167,65 @@ struct
         }
 
 
+  local
+    fun streamFoldBlocks (f, blockSize) isEnd acc (strm : BinIO.instream) = let
+      val block = BinIO.inputN (strm, blockSize)
+      val blockLen = Word8Vector.length block
+      val isEnd' = blockLen < blockSize
+    in
+      if blockLen < 0 then
+        if isEnd then acc (* End was already encountered *)
+        else f (block, acc) (* Last block was a "perfect" end *)
+      else streamFoldBlocks (f, blockSize) isEnd' (f (block, acc)) strm
+    end
+  in
+
+  fun streamDigest strm = let
+    val (_, { a = a, b = b, c = c, d = d }) =
+        streamFoldBlocks (runBlock, 0x40) false (0w0, initialVars) strm
+  in
+    Word8Vector.concat (map word32ToWord8VecLE [a, b, c, d])
+  end
+
+  fun fileDigest fname = let
+    val instream = BinIO.openIn fname
+    val digest = streamDigest instream
+  in
+    BinIO.closeIn instream; digest
+  end
+
+  end
+
+  local
+    fun hexDigit (0w0 : Word8.word) = #"0"
+      | hexDigit 0w1 = #"1"
+      | hexDigit 0w2 = #"2"
+      | hexDigit 0w3 = #"3"
+      | hexDigit 0w4 = #"4"
+      | hexDigit 0w5 = #"5"
+      | hexDigit 0w6 = #"6"
+      | hexDigit 0w7 = #"7"
+      | hexDigit 0w8 = #"8"
+      | hexDigit 0w9 = #"9"
+      | hexDigit 0wxa = #"a"
+      | hexDigit 0wxb = #"b"
+      | hexDigit 0wxc = #"c"
+      | hexDigit 0wxd = #"d"
+      | hexDigit 0wxe = #"e"
+      | hexDigit 0wxf = #"f"
+
+    fun word8ToHex w =
+        String.implode
+          [ hexDigit (Word8.div (w, 0wx10))
+          , hexDigit (Word8.mod (w, 0wx10))
+          ]
+  in
+
+  val digestMessage = Word8Vector.foldl (fn (x, msg) => msg ^ word8ToHex x) ""
+
+  end
+
+  val streamDigestMessage = digestMessage o streamDigest
+  val fileDigestMessage = digestMessage o fileDigest
 
 end
