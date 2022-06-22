@@ -1,0 +1,20 @@
+* MD5 in SML
+
+** Status
+
+This is currently broken.  I tried to follow the RFC as well as I could,
+but now I am pulling my hair, because I keep getting (the same) wrong digests.
+
+** Testing
+
+You can test the work in /lib/ using the tests in /test/.  Use the make file.
+
+#+begin_src sh
+  # Uses mlton and takes too long
+  make test
+  # Fast tests (default is using poly)
+  make quicktest
+  # use poly or smlnj directly
+  make test.poly
+  make test.smlnj
+#+end_src
