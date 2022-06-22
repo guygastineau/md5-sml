@@ -1,13 +1,16 @@
 structure MD5 =
 struct
+  type vars = { a : Word32.word, b : Word32.word, c : Word32.word, d : Word32.word }
+
   fun perRoundShift n =
-      if n < 16
-      then List.nth ([7, 12, 17, 22], n mod 4)
-      else if n < 32
-      then List.nth ([5, 9, 14, 20], n mod 4)
-      else if n < 48
-      then List.nth ([4, 11, 16, 23], n mod 4)
-      else List.nth ([6, 10, 15, 21], n mod 4)
+      Word.fromInt
+        (if n < 16
+         then List.nth ([7, 12, 17, 22], n mod 4)
+         else if n < 32
+         then List.nth ([5, 9, 14, 20], n mod 4)
+         else if n < 48
+         then List.nth ([4, 11, 16, 23], n mod 4)
+         else List.nth ([6, 10, 15, 21], n mod 4))
 
   val constants : Word32.word vector
       = Vector.map Word32.fromLargeInt
@@ -32,18 +35,125 @@ struct
 
   val word8To32 = Word32.fromLargeWord o Word8.toLargeWord
 
-  (* xs MUST have size of at least 4 *)
+  (* xs MUST have size of at least 4! *)
   fun indexedWord32LE (xs, i) : Word32.word =
       let
-        fun f (xs, i') = word8To32 (Word8Vector.sub (xs, i'))
+        fun f i' = word8To32 (Word8Vector.sub (xs, i'))
         fun shiftLeft (x, n) = Word32.<< (x, Word.fromInt n)
-        val w = shiftLeft (f (xs, i + 3), 24)
-        val x = shiftLeft (f (xs, i + 2), 16)
-        val y = shiftLeft (f (xs, i + 1), 8)
-        val z = f (xs, i)
+        val w = shiftLeft (f (i + 3), 24)
+        val x = shiftLeft (f (i + 2), 16)
+        val y = shiftLeft (f (i + 1), 8)
+        val z = f i
       in
         Word32.orb (w, Word32.orb (x, Word32.orb (y, z)))
       end
 
-  (* fun md5RunBlock (block, (int * )) *)
+  fun word64ToWord8VecLE x = let
+    fun shiftLeft (x, n) = Word64.<< (x, Word.fromInt n)
+    fun shiftRight (x, n) = Word64.>> (x, Word.fromInt n)
+    fun f n = let
+      val ls = (7 - n) * 8
+      val rs = ls + n * 8
+    in
+      (Word8.fromLargeWord o Word64.toLargeWord)
+        (shiftRight (shiftLeft (x, ls), rs))
+    end
+  in
+    Word8Vector.tabulate (7, f)
+  end
+
+  (* block must be >= 512 bits! *)
+  local
+    fun andOrNotAnd (b, c, d)
+        = Word32.orb (Word32.andb (b, c), Word32.andb (Word32.notb b, d))
+
+    fun xorXor (b, c, d) = Word32.xorb (b, Word32.xorb (c, d))
+
+    fun xorOrNot (b, c, d) = Word32.xorb (c, Word32.orb (b, Word32.notb d))
+
+    (* block must be 64 bytes *)
+    fun process (block, (totalLen, vars)) =
+        let
+          fun round (i, { a = a, b = b, c = c, d = d }) =
+              let
+                val (f', g) =
+                    if i < 16
+                    then (andOrNotAnd (b, c, d), Word32.fromInt i)
+                    else if i < 32
+                    then (andOrNotAnd (d, b, c), Word32.fromInt (5 * i + 1 mod 16))
+                    else if i < 48
+                    then (xorXor (b, c, d), Word32.fromInt (3 * i + 5 mod 16))
+                    else (xorOrNot (b, c, d), Word32.fromInt (7 * i mod 16))
+                val mg = indexedWord32LE (block, i * 4)
+                val ki = Vector.sub (constants, i)
+                val f = foldl Word32.+ (Word32.fromInt 0) [f', a, ki, mg]
+              in
+                { a = Word32.+ (a, d)
+                , b = b + Word32.<< (f, perRoundShift i)
+                , c = Word32.+ (c, b)
+                , d = Word32.+ (d, c)
+                }
+              end
+        in
+          (Word64.+ (totalLen, Word64.fromInt 64)
+          , foldl round vars (List.tabulate (63, (fn x => x)))
+          )
+        end
+
+    fun trailingBit block =
+        Word8Vector.concat
+          [ block
+          , Word8Vector.fromList [Word8.fromInt 0x80]
+          ]
+
+    fun pad (n, block) =
+        let
+          val padding = Word8Vector.tabulate (n - 1, (fn _ => Word8.fromInt 0))
+        in
+          Word8Vector.concat [block, padding]
+        end
+
+    fun padWithLength (totalLen, blockLen, block) =
+        let
+          val padN = 56 - Word64.toInt blockLen
+          val block' = pad (padN, block)
+        in
+          Word8Vector.concat [pad (padN, block), word64ToWord8VecLE totalLen ]
+        end
+
+    fun finalize blockLen (block, (totalLen, vars)) = let
+      val totalLen' = Word64.+ (totalLen, blockLen)
+      val blockLen' = Word64.+ (blockLen, Word64.fromInt 1)
+    in
+      if Word64.< (blockLen, Word64.fromInt 56) then
+              process (padWithLength (totalLen', blockLen', trailingBit block)
+                      , (totalLen', vars))
+          else
+            let
+              val padN = 64 - Word64.toInt blockLen'
+              val (_, vars') = process (pad (padN, trailingBit block)
+                                       , (totalLen', vars))
+            in
+              process (padWithLength (totalLen', Word64.fromInt 0, Word8Vector.fromList [])
+                      , (totalLen', vars))
+            end
+    end
+  in
+    fun runBlock (block, (totalLen, vars)) =
+        let
+          val blockLen = Word64.fromInt (Word8Vector.length block)
+        in
+          if blockLen < Word64.fromInt 64
+          then finalize blockLen (block, (totalLen, vars))
+          else process (block, (totalLen, vars))
+        end
+  end
+
+  val initialVars
+      = { a = Word32.fromLargeInt 0x67452301
+        , b = Word32.fromLargeInt 0xefcdab89
+        , c = Word32.fromLargeInt 0x98badcfe
+        , d = Word32.fromLargeInt 0x10325476
+        }
+
 end
