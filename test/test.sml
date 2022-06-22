@@ -15,12 +15,18 @@ open Expect
 open TestUtil
 open MD5
 
+local
+  val w8VecShow = Word8Vector.foldl (fn (x, s) => s ^ Word8.toString x ^ " ") ""
+in
+fun equalToW8Vec expected actual
+    = mkEqualTo { eq = op =, show = w8VecShow } (Word8Vector.fromList expected) actual
+end
+
 fun equalToString expected actual
     = mkEqualTo { eq = op =, show = identity } expected actual
 
 fun equalToWord32 expected actual
-    = mkEqualTo { eq = op =, show = Word32.toString }
-                (Word32.fromLargeInt expected) actual
+    = mkEqualTo { eq = op =, show = Word32.toString } expected actual
 
 fun equalToWord expected actual
     = mkEqualTo { eq = op =, show = Word.toString }
@@ -61,6 +67,11 @@ val testsuite =
               @@ (fn _ => equalToWord 15 (perRoundShift 58))
           , test "3 3 with mod"
               @@ (fn _ => equalToWord 21 (perRoundShift 55))
+          ]
+      , describe "bytes and integers utilities test"
+          [ test "word32LERoundTrip"
+              @@ (fn _ => equalToWord32 0wxaabbccdd
+                            @@ indexedWord32LE (word32ToWord8VecLE 0wxaabbccdd, 0))
           ]
       , describe "digest message tests"
           [ test "pangram digest"
