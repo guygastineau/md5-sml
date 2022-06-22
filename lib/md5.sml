@@ -103,10 +103,10 @@ struct
                 val ki = Vector.sub (constants, i)
                 val f = foldl Word32.+ 0wx0 [f', a, ki, mg]
               in
-                { a = Word32.+ (a, d)
+                { a = a + d
                 , b = b + Word32.<< (f, perRoundShift i)
-                , c = Word32.+ (c, b)
-                , d = Word32.+ (d, c)
+                , c = c + b
+                , d = d + c
                 }
               end
         in
@@ -120,11 +120,7 @@ struct
           ]
 
     fun pad (n, block) =
-        let
-          val padding = Word8Vector.tabulate (n, (fn _ => 0w0))
-        in
-          Word8Vector.concat [block, padding]
-        end
+        Word8Vector.concat [block, Word8Vector.tabulate (n, (fn _ => 0w0))]
 
     fun padWithLength (totalLen, blockLen, block) =
         let
@@ -135,26 +131,27 @@ struct
         end
 
     fun finalize blockLen (block, (totalLen, vars)) = let
-      val totalLen' = Word64.+ (totalLen, blockLen)
-      val blockLen' = Word64.+ (blockLen, 0w1)
+      val totalLen' = totalLen + blockLen
+      val blockLen' = blockLen + 0w1
+      val block = trailingBit block
     in
-      if blockLen < 0wx38 then
+      if blockLen' < 0wx38 then
         ( totalLen'
-        , process (padWithLength (totalLen', blockLen', trailingBit block), vars))
+        , process (padWithLength (totalLen', blockLen', block), vars))
       else
         let
           val padN = 0x40 - Word64.toInt blockLen'
-          val vars' = process (pad (padN, trailingBit block), vars)
+          val vars' = process (pad (padN, block), vars)
         in
           ( totalLen'
-          , process (padWithLength (totalLen',  0w0, Word8Vector.fromList []), vars))
+          , process (padWithLength (totalLen',  0w0, Word8Vector.fromList []), vars'))
         end
     end
   in
     fun runBlock (block, (totalLen, vars)) =
         let
           val blockLen = Word64.fromInt (Word8Vector.length block)
-          val totalLen' = Word64.+ (totalLen, blockLen)
+          val totalLen' = totalLen + blockLen
         in
           if blockLen < 0wx40
           then finalize blockLen (block, (totalLen, vars))
@@ -168,7 +165,6 @@ struct
         , c = 0wx98badcfe
         , d = 0wx10325476
         }
-
 
   local
     fun streamFoldBlocks (f, blockSize) isEnd acc (strm : BinIO.instream) = let
