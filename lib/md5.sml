@@ -43,7 +43,7 @@ struct
         val y = Word32.<< (f (i + 1), 0wx08)
         val z = Word32.<< (f i      , 0wx00)
       in
-        Word32.orb (w, Word32.orb (x, Word32.orb (y, z)))
+        w + x + y + z
       end
 
   fun word64ToWord8VecLE x = let
@@ -74,7 +74,7 @@ struct
     Word8Vector.tabulate (4, f)
   end
 
-  (* block must be >= 512 bits! *)
+  (* block must be = 512 bits (0x40 bytes)! *)
   local
     fun combineVars ({ a = a , b = b , c = c , d = d  } : vars)
                     ({ a = a', b = b', c = c', d = d' } : vars) : vars =
@@ -98,7 +98,7 @@ struct
     (* block must be 64 bytes *)
     fun process (block, vars) =
         let
-          fun round (i, { a = a, b = b, c = c, d = d }) : vars =
+          fun rounds (i, { a = a, b = b, c = c, d = d }) : vars =
               let
                 val (f', g) =
                     if i < 0x10      then (fF, idxF i)
@@ -116,14 +116,11 @@ struct
                 }
               end
         in
-          combineVars vars (foldl round vars (List.tabulate (0x40, (fn x => x))))
+          combineVars vars (foldl rounds vars (List.tabulate (0x40, (fn x => x))))
         end
 
     fun trailingBit block =
-        Word8Vector.concat
-          [ block
-          , Word8Vector.fromList [0wx80]
-          ]
+        Word8Vector.concat [ block, Word8Vector.fromList [0wx80] ]
 
     fun pad (n, block) =
         Word8Vector.concat [block, Word8Vector.tabulate (n, (fn _ => 0w0))]
@@ -153,7 +150,7 @@ struct
           , process (padWithLength (totalLen',  0w0, Word8Vector.fromList []), vars'))
         end
     end
-  in
+
     fun runBlock (block, (totalLen, vars)) =
         let
           val blockLen = Word64.fromInt (Word8Vector.length block)
@@ -163,31 +160,27 @@ struct
           then finalize blockLen (block, (totalLen, vars))
           else (totalLen', process (block, vars))
         end
-  end
 
-  val initialVars : vars
-      = { a = 0wx67452301
-        , b = 0wxefcdab89
-        , c = 0wx98badcfe
-        , d = 0wx10325476
-        }
+    val initialVars : vars
+        = { a = 0wx67452301
+          , b = 0wxefcdab89
+          , c = 0wx98badcfe
+          , d = 0wx10325476
+          }
 
-  local
-    fun streamFoldBlocks (f, blockSize) isEnd acc (strm : BinIO.instream) = let
+    fun streamFoldBlocks blockSize f acc (strm : BinIO.instream) = let
       val block = BinIO.inputN (strm, blockSize)
       val blockLen = Word8Vector.length block
-      val isEnd' = blockLen < blockSize
+      val acc' = f (block, acc)
     in
-      if blockLen = 0 then
-        if isEnd then acc (* End was already encountered *)
-        else f (block, acc) (* Last block was a "perfect" end *)
-      else streamFoldBlocks (f, blockSize) isEnd' (f (block, acc)) strm
+      if blockLen < blockSize then acc'
+      else streamFoldBlocks blockSize f acc' strm
     end
   in
 
   fun streamDigest strm = let
     val (_, { a = a, b = b, c = c, d = d }) =
-        streamFoldBlocks (runBlock, 0x40) false (0w0, initialVars) strm
+        streamFoldBlocks 0x40 runBlock (0w0, initialVars) strm
   in
     Word8Vector.concat (map word32ToWord8VecLE [a, b, c, d])
   end
