@@ -40,31 +40,7 @@ struct
 
   val word8To32 = Word32.fromLargeWord o Word8.toLargeWord
 
-  (* xs MUST have size of at least 4! *)
-  fun indexedWord32LE (xs, i) : Word32.word =
-      let
-        fun f i' = word8To32 (Word8Vector.sub (xs, i'))
-        val w = Word32.<< (f (i + 3), 0wx18)
-        val x = Word32.<< (f (i + 2), 0wx10)
-        val y = Word32.<< (f (i + 1), 0wx08)
-        val z = f i
-      in
-        w + x + y + z
-      end
-
-  fun word64ToWord8VecLE x = let
-    fun shiftLeft (x, n) = Word64.<< (x, Word.fromInt n)
-    fun shiftRight (x, n) = Word64.>> (x, Word.fromInt n)
-    fun f n = let
-      val ls = (7 - n) * 8
-      val rs = ls + n * 8
-    in
-      (Word8.fromLargeWord o Word64.toLargeWord)
-        (shiftRight (shiftLeft (x, ls), rs))
-    end
-  in
-    Word8Vector.tabulate (8, f)
-  end
+  val indexedWord32LE = Word32.fromLargeWord o PackWord32Little.subVec
 
   fun word32ToWord8VecLE x = let
     fun shiftLeft (x, n) = Word32.<< (x, Word.fromInt n)
@@ -78,6 +54,20 @@ struct
     end
   in
     Word8Vector.tabulate (4, f)
+  end
+
+  fun word64ToWord8VecLE x = let
+    fun shiftLeft (x, n) = Word64.<< (x, Word.fromInt n)
+    fun shiftRight (x, n) = Word64.>> (x, Word.fromInt n)
+    fun f n = let
+      val ls = (7 - n) * 8
+      val rs = ls + n * 8
+    in
+      (Word8.fromLargeWord o Word64.toLargeWord)
+        (shiftRight (shiftLeft (x, ls), rs))
+    end
+  in
+    Word8Vector.tabulate (8, f)
   end
 
   fun hexDigit (0w0 : Word8.word) = #"0"
@@ -140,7 +130,7 @@ struct
                     else if i < 0x20 then (fG, idxG i)
                     else if i < 0x30 then (fH, idxH i)
                     else                  (fI, idxI i)
-                val xk = indexedWord32LE (block, k * 4)
+                val xk = indexedWord32LE (block, k)
                 val ti = Vector.sub (constants, i)
                 val a' =  b + Word32.<< (a + f' (b, c, d) + xk + ti, perRoundShift i)
               in
