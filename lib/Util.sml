@@ -61,4 +61,14 @@ struct
                        print (word8ToHex x ^ " ")))
         xs
 
+  fun pad (n, block) =
+      Word8Vector.concat [block, Word8Vector.tabulate (n, (fn _ => 0w0))]
+
+  fun padWithLength64LE (totalLen, blockLen, block) =
+      let
+        val padN = 0x38 - blockLen
+      in
+        Word8Vector.concat [pad (padN, block), word64BytesLE (totalLen * 0w8)]
+      end
+
 end

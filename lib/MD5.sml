@@ -82,28 +82,18 @@ struct
           combineVars vars (foldl rounds vars (List.tabulate (0x40, (fn x => x))))
         end
 
-    fun pad (n, block) =
-        Word8Vector.concat [block, Word8Vector.tabulate (n, (fn _ => 0w0))]
-
-    fun padWithLength (totalLen, blockLen, block) =
-        let
-          val padN = 0x38 - blockLen
-        in
-          Word8Vector.concat [pad (padN, block), word64BytesLE (totalLen * 0w8)]
-        end
-
     fun md5Finalize (totalLen, block) = let
       val block = Word8Vector.concat [ block, Word8Vector.fromList [0wx80] ]
       val blockLen = Word8Vector.length block
     in
       if blockLen <= 0x38 then
-        [padWithLength (totalLen, Word8Vector.length block, block)]
+        [padWithLength64LE (totalLen, Word8Vector.length block, block)]
       else
         let
           val padN = 0x40 - blockLen
           val secondToLast = pad (padN, block)
         in
-          [secondToLast, padWithLength (totalLen, 0, Word8Vector.fromList [])]
+          [secondToLast, padWithLength64LE (totalLen, 0, Word8Vector.fromList [])]
         end
     end
 
