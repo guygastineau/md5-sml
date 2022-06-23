@@ -148,7 +148,7 @@ struct
           val padN = 0x38 - Word64.toInt blockLen
           val block' = pad (padN, block)
         in
-          Word8Vector.concat [pad (padN, block), word64BytesLE totalLen ]
+          Word8Vector.concat [pad (padN, block), word64BytesLE (totalLen * 0w8)]
         end
 
     fun finalize blockLen (block, (totalLen, vars)) = let
@@ -170,7 +170,7 @@ struct
         in
           (print "secondToLast: "; printW8Vec secondToLast; print "\n";
            print "last: "; printW8Vec last;
-           (totalLen,  process (last, process (secondToLast, vars))))
+           (totalLen, process (last, process (secondToLast, vars))))
         end
     end
 
