@@ -180,12 +180,8 @@ struct
           val totalLen' = totalLen + blockLen
         in
           if blockLen < 0wx40
-          then (print ("Finalizing with " ^ Word64.toString blockLen ^ "bytes\n");
-                print ("and total length " ^ Word64.toString totalLen' ^ "\n");
-                finalize blockLen (block, (totalLen', vars)))
-          else (print ("Continuing with " ^ Word64.toString blockLen ^ "bytes\n");
-                print ("and total length " ^ Word64.toString totalLen' ^ "\n");
-                (totalLen', process (block, vars)))
+          then finalize blockLen (block, (totalLen', vars))
+          else (totalLen', process (block, vars))
         end
 
     fun streamFoldBlocks blockSize f acc (strm : BinIO.instream) = let
@@ -197,6 +193,9 @@ struct
       else streamFoldBlocks blockSize f acc' strm
     end
   in
+  type config = { blockSize : int , finalizer : vec -> (IntInf.int * vec) list }
+  (* Passed to the folding functions to identify the end if they need to act on it *)
+  type foldinfo = { read : IntInf.int, finished : bool }
 
   fun streamDigest strm = let
     val (_, { a = a, b = b, c = c, d = d }) =
