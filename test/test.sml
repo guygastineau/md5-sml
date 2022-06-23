@@ -13,6 +13,7 @@ fun identity x = x
 
 open Expect
 open TestUtil
+open Util
 open MD5
 
 local

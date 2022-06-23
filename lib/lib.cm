@@ -1,6 +1,7 @@
 Group is
       BlockStream.sig
       BlockStream.sml
-      md5.sml
+      Util.sml
+      MD5.sml
 
       $/basis.cm
