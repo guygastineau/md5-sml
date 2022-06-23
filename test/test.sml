@@ -18,7 +18,7 @@ open MD5
 local
   val w8VecShow = Word8Vector.foldl (fn (x, s) => s ^ Word8.toString x ^ " ") ""
 in
-fun equalToW8Vec expected actual
+fun equalToWord8Vec expected actual
     = mkEqualTo { eq = op =, show = w8VecShow } (Word8Vector.fromList expected) actual
 end
 
@@ -69,9 +69,16 @@ val testsuite =
               @@ (fn _ => equalToWord 21 (perRoundShift 55))
           ]
       , describe "bytes and integers utilities test"
-          [ test "word32LERoundTrip"
+          [ test "word32LE RoundTrip"
               @@ (fn _ => equalToWord32 0wxaabbccdd
-                            @@ indexedWord32LE (word32ToWord8VecLE 0wxaabbccdd, 0))
+                            @@ indexedWord32LE (word32BytesLE 0wxaabbccdd, 0))
+          , test "word64LE RoundTrip"
+                 @@ (fn _ => let
+                       val expected =
+                           [ 0wx11, 0wx00, 0wxff, 0wxee, 0wxdd, 0wxcc, 0wxbb, 0wxaa ]
+                     in
+                       equalToWord8Vec expected @@ word64BytesLE 0wxaabbccddeeff0011
+                     end)
           ]
       , describe "digest message tests"
           [ test "pangram digest"

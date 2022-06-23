@@ -42,7 +42,7 @@ struct
 
   val indexedWord32LE = Word32.fromLargeWord o PackWord32Little.subVec
 
-  fun word32ToWord8VecLE x = let
+  fun word32BytesLE x = let
     fun shiftLeft (x, n) = Word32.<< (x, Word.fromInt n)
     fun shiftRight (x, n) = Word32.>> (x, Word.fromInt n)
     fun f n = let
@@ -56,7 +56,7 @@ struct
     Word8Vector.tabulate (4, f)
   end
 
-  fun word64ToWord8VecLE x = let
+  fun word64BytesLE x = let
     fun shiftLeft (x, n) = Word64.<< (x, Word.fromInt n)
     fun shiftRight (x, n) = Word64.>> (x, Word.fromInt n)
     fun f n = let
@@ -148,7 +148,7 @@ struct
           val padN = 0x38 - Word64.toInt blockLen
           val block' = pad (padN, block)
         in
-          Word8Vector.concat [pad (padN, block), word64ToWord8VecLE totalLen ]
+          Word8Vector.concat [pad (padN, block), word64BytesLE totalLen ]
         end
 
     fun finalize blockLen (block, (totalLen, vars)) = let
@@ -202,7 +202,7 @@ struct
     val (_, { a = a, b = b, c = c, d = d }) =
         streamFoldBlocks 0x40 runBlock (0w0, initialVars) strm
   in
-    Word8Vector.concat (map word32ToWord8VecLE [a, b, c, d])
+    Word8Vector.concat (map word32BytesLE [a, b, c, d])
   end
 
   fun fileDigest fname = let
