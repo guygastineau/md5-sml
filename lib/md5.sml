@@ -193,9 +193,6 @@ struct
       else streamFoldBlocks blockSize f acc' strm
     end
   in
-  type config = { blockSize : int , finalizer : vec -> (IntInf.int * vec) list }
-  (* Passed to the folding functions to identify the end if they need to act on it *)
-  type foldinfo = { read : IntInf.int, finished : bool }
 
   fun streamDigest strm = let
     val (_, { a = a, b = b, c = c, d = d }) =
