@@ -159,8 +159,7 @@ struct
         let
           val last = padWithLength (totalLen, blockLen', block)
         in
-          (print "last: "; printW8Vec last; print "\n";
-           (totalLen, process (last, vars)))
+           (totalLen, process (last, vars))
         end
       else
         let
@@ -168,9 +167,7 @@ struct
           val secondToLast = pad (padN, block)
           val last = padWithLength (totalLen, 0w0, Word8Vector.fromList [])
         in
-          (print "secondToLast: "; printW8Vec secondToLast; print "\n";
-           print "last: "; printW8Vec last;
-           (totalLen, process (last, process (secondToLast, vars))))
+           (totalLen, process (last, process (secondToLast, vars)))
         end
     end
 
