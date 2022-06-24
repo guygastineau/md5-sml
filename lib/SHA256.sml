@@ -35,8 +35,26 @@ struct
         , 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
         ]
 
-        (* invariant 0 <= i < 64 *)
-  fun getMsgIdx i =
-      if i < 0x10 then i
-      else if i < 0x20 then
+  (* We build a buffer of 64 Word32s from the buffer of 64 Word8s *)
+  fun buildW xs = let
+    val w = Word32Array (64, 0w0)
+    fun f i =
+        if i < 0x10 then Word8Array.update (w, i, indexedWord32BE (xs, i))
+        else let
+          val w0 = Word32Array.sub (w, i - 15)
+          val s0 = Word32.xorb
+                     ( Word32.xorb (Word32.>> (w0, 0w7), Word32.>> (w0, 0w18))
+                     , Word32.>> (w0, 0w3) )
+          val w1 = Word32Array.sub (w, i - 2)
+          val s1 = Word32.xorb
+                     ( Word32.xorb (Word32.>> (w1, 0w17), Word.>> (w1, 0w19))
+                     , Word32.>> (w1, 0w10) )
+          val wi = Word32Array.sub (w, i - 16) + s0 + Word32Array.sub (w, i - 7) + s1
+        in
+          Word32Array.update (w, i, wi)
+        end
+  in
+    List.app f (List.tabulate (64, fn x => x))
+  end
+
 end
