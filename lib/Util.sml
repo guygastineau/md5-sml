@@ -3,6 +3,7 @@ struct
   val word8To32 = Word32.fromLargeWord o Word8.toLargeWord
 
   val indexedWord32LE = Word32.fromLargeWord o PackWord32Little.subVec
+  val indexedWord32BE = Word32.fromLargeWord o PackWord32Big.subVec
 
   fun word32BytesLE x = let
     fun shiftLeft (x, n) = Word32.<< (x, Word.fromInt n)
@@ -18,18 +19,27 @@ struct
     Word8Vector.tabulate (4, f)
   end
 
-  fun word64BytesLE x = let
+  local
     fun shiftLeft (x, n) = Word64.<< (x, Word.fromInt n)
     fun shiftRight (x, n) = Word64.>> (x, Word.fromInt n)
-    fun f n = let
-      val ls = (7 - n) * 8
-      val rs = ls + n * 8
-    in
+  in
+
+  fun word64BytesLE x = let
+    fun f n =
       (Word8.fromLargeWord o Word64.toLargeWord)
-        (shiftRight (shiftLeft (x, ls), rs))
-    end
+        (shiftRight (shiftLeft (x, (7 - n) * 8), 0x38))
   in
     Word8Vector.tabulate (8, f)
+  end
+
+  fun word64BytesBE x = let
+    fun f n =
+      (Word8.fromLargeWord o Word64.toLargeWord)
+        (shiftRight (shiftLeft (x, (n * 8)), 0x38))
+  in
+    Word8Vector.tabulate (8, f)
+  end
+
   end
 
   fun hexDigit (0w0 : Word8.word) = #"0"
